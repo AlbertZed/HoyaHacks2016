@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>RE:sign</title>
+	<link rel="stylesheet" href="main.css">
+
+	<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/three.js/r70/three.min.js"></script>
+  	<script src="//js.leapmotion.com/leap-0.6.4.min.js"></script>
+    <script src="//js.leapmotion.com/leap-plugins-0.1.11.min.js"></script>
+  	<script type="text/javascript" src="build/leap.rigged-hand-0.1.7.js"></script>
+</head>
+<body>
+	<h1>RE:sign</h1>
+	<p>Learn ASL</p>
+
+	<script>
+	  (window.controller = new Leap.Controller)
+	    .use('riggedHand', {
+	      boneLabels: function(boneMesh, leapHand) {
+	        return boneMesh.name
+	      }
+	  })
+	    .connect()
+	</script>
+
+	
+</body>
+</html>

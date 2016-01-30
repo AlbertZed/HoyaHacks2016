@@ -1,0 +1,233 @@
+
+<!doctype html>
+<html>
+<head>
+	<meta charset=utf-8 >
+	<title>RE:sign</title>
+	<meta name=viewport content='width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,minimal-ui' >
+	<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
+	  	<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+</head>
+<body>
+
+	<script src=http://rawgit.com/mrdoob/three.js/dev/build/three.min.js ></script>
+	<script src=http://rawgit.com/mrdoob/three.js/dev/examples/js/controls/OrbitControls.js ></script>
+	<script src=http://rawgit.com/mrdoob/three.js/dev/examples/js/libs/stats.min.js ></script>
+	<script src=http://js.leapmotion.com/leap-0.6.4.js ></script>
+	<script src=http://js.leapmotion.com/leap-plugins-0.1.11.js></script>
+
+
+<script>
+	var baseBoneRotation = ( new THREE.Quaternion ).setFromEuler( new THREE.Euler( 0, 0, Math.PI / 2 ) );
+	var armMeshes = [];
+	var boneMeshes = [];
+	var stats, renderer, scene, camera, controls;
+
+	var output = document.getElementById("output");
+    var frameString = "", handString = "", fingerString = "";
+    var hand, finger;
+    var options = { enableGestures: true };
+
+	//Runs the init function, then the Leap loop
+	init();
+	Leap.loop( {enableGestures: true}, leapAnimate ).connect();
+
+	// Leap.loop(options, function(frame) {
+	// 	frameString = concatData("frame_id", frame.id);
+ //      frameString += concatData("num_hands", frame.hands.length);
+ //      frameString += concatData("num_fingers", frame.fingers.length);
+ //      frameString += "<br>";
+    
+ //      // Showcase some new V2 features
+ //      for (var i = 0, len = frame.hands.length; i < len; i++) {
+ //        hand = frame.hands[i];
+ //        handString = concatData("hand_type", hand.type);
+ //        handString += concatData("confidence", hand.confidence);
+ //        handString += concatData("pinch_strength", hand.pinchStrength);
+ //        handString += concatData("grab_strength", hand.grabStrength);
+    
+ //        handString += '<br>';
+    
+ //        // Helpers for thumb, pinky, etc.
+ //        fingerString = concatJointPosition("finger_thumb_dip", hand.thumb.dipPosition);
+ //        for (var j = 0, len2 = hand.fingers.length; j < len2; j++) {
+ //          finger = hand.fingers[j];
+ //          fingerString += concatData("finger_type", finger.type) + " (" + getFingerName(finger.type) + ") <br>";
+ //          fingerString += concatJointPosition("finger_dip", finger.dipPosition);
+ //          fingerString += concatJointPosition("finger_pip", finger.pipPosition);
+ //          fingerString += concatJointPosition("finger_mcp", finger.mcpPosition);
+ //          fingerString += "<br>";
+ //        }
+    
+ //        frameString += handString;
+ //        frameString += fingerString;
+ //      }
+    
+ //      output.innerHTML = frameString;
+	// });
+
+	function init() {
+		var css = document.head.appendChild( document.createElement( 'style' ) );
+		css.innerHTML =
+		`
+			@import url(https://fonts.googleapis.com/css?family=Poiret+One);
+			@import url(https://fonts.googleapis.com/css?family=Open+Sans:300);
+			body { background: #efefef;
+				    font-family: 'Open Sans', sans-serif;
+				    font-size: 16px;
+				    line-height: 24px;
+				    text-align: center; }
+			h2 { font-family: 'Poiret One', cursive;
+   				 font-size: 60px;
+   				 line-height: 25px;
+   				 padding: 25px;}
+
+			#aa {text-decoration: none; }
+			#menu { margin: 0 20px; position: absolute; padding: 40px; }
+			#text { line-height: 45px; font-size: 20px; padding: 20px; }
+			#letter {text-align: center; }
+
+		`;
+
+		var menu = document.body.appendChild( document.createElement( 'div' ) );
+		menu.id = 'menu';
+		menu.innerHTML =
+		`
+
+			<h2>
+				${ document.title } 
+			</h2>
+			<p> Lets Learn ASL! </p>
+			<div id=info ></div>
+
+		`;
+		var text = document.body.appendChild( document.createElement( 'div' ) );
+		text.id = 'text';
+		text.innerHTML =
+		`
+			<button type="button" class="btn btn-default">Get Started</button>
+
+		`;
+
+		var letter = document.body.appendChild( document.createElement( 'div' ) );
+		letter.id = 'letter';
+		letter.innerHTML =
+		`
+
+			<p> Letter: </p>
+			<p id="output"></p>
+
+		`;
+
+		//Ignore this part - just puts stats on the right hand corner of the page
+		stats = new Stats();
+		stats.domElement.style.cssText = 'position: absolute; right: 0; top: 0; z-index: 100; ';
+		//document.body.appendChild( stats.domElement );
+
+		renderer = new THREE.WebGLRenderer( { alpha: 1, antialias: true, clearColor: 0xffffff }  );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		document.body.appendChild( renderer.domElement );
+
+		camera = new THREE.PerspectiveCamera( 35, window.innerWidth / window.innerHeight, 1, 5000 );
+		camera.position.set( 0, 250, 2500 );
+
+		controls = new THREE.OrbitControls( camera, renderer.domElement );
+		controls.maxDistance = 1000;
+
+		scene = new THREE.Scene();
+
+		// Helpers - makes the ThreeJS bottom plane
+		var gridHelper = new THREE.GridHelper( 200, 20 );
+		scene.add( gridHelper );
+
+		var axisHelper = new THREE.AxisHelper( 200 );
+		scene.add( axisHelper );
+
+		var geometry = new THREE.BoxGeometry( 1000, 10, 1000 );
+		var material = new THREE.MeshDepthMaterial();
+		var mesh = new THREE.Mesh( geometry, material );
+		mesh.position.set( 0, -10, 0 );
+		scene.add( mesh );
+
+		window.addEventListener( 'resize', onWindowResize, false );
+
+	}
+
+	function concatData(id, data) {
+      return id + ": " + data + "<br>";
+    }
+
+	function onWindowResize() {
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+	}
+
+	function addMesh( meshes ) {
+
+		var geometry = new THREE.BoxGeometry( 1, 1, 1 );
+		var material = new THREE.MeshNormalMaterial();
+		var mesh = new THREE.Mesh( geometry, material );
+		meshes.push( mesh );
+
+		return mesh;
+
+	}
+
+	function updateMesh( bone, mesh ) {
+
+			mesh.position.fromArray( bone.center() );
+			mesh.setRotationFromMatrix( ( new THREE.Matrix4 ).fromArray( bone.matrix() ) );
+			mesh.quaternion.multiply( baseBoneRotation );
+			mesh.scale.set( bone.width, bone.width, bone.length );
+
+			scene.add( mesh );
+
+	}
+
+	function leapAnimate( frame ) {
+
+		var countBones = 0;
+		var countArms = 0;
+
+		armMeshes.forEach( function( item ) { scene.remove( item ) } );
+		boneMeshes.forEach( function( item ) { scene.remove( item ) } );
+
+		for ( var hand of frame.hands ) {
+
+			for ( var finger of hand.fingers ) {
+
+				for ( var bone of finger.bones ) {
+
+					if ( countBones++ === 0 ) { continue; }
+
+					var boneMesh = boneMeshes [ countBones ] || addMesh( boneMeshes );
+					updateMesh( bone, boneMesh );
+
+				}
+
+			}
+			// Commented this out - ignored, just an arm part 
+
+			// var arm = hand.arm;
+			// var armMesh = armMeshes [ countArms++ ] || addMesh( armMeshes );
+			// updateMesh( arm, armMesh );
+			// armMesh.scale.set( arm.width , arm.width , arm.length );
+
+		}
+
+		renderer.render( scene, camera );
+		controls.update();
+		stats.update();
+
+	}
+
+</script>
+
+
+</body>
+</html>
