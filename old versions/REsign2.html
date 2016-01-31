@@ -1,0 +1,407 @@
+
+<!doctype html>
+<html>
+<head>
+	<meta charset=utf-8 >
+	<title>RE:sign</title>
+	<meta name=viewport content='width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,minimal-ui' >
+	<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
+	  	<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+</head>
+<body>
+
+	<script src=http://rawgit.com/mrdoob/three.js/dev/build/three.min.js ></script>
+	<script src=http://rawgit.com/mrdoob/three.js/dev/examples/js/controls/OrbitControls.js ></script>
+	<script src=http://rawgit.com/mrdoob/three.js/dev/examples/js/libs/stats.min.js ></script>
+	<script src=http://js.leapmotion.com/leap-0.6.4.js ></script>
+	<script src=http://js.leapmotion.com/leap-plugins-0.1.11.js></script>
+
+	<div id="output">
+	</div>
+	<div id="letter">
+	</div>
+
+<script>
+	var baseBoneRotation = ( new THREE.Quaternion ).setFromEuler( new THREE.Euler( 0, 0, Math.PI / 2 ) );
+	var armMeshes = [];
+	var boneMeshes = [];
+	var stats, renderer, scene, camera, controls;
+
+	var output = document.getElementById("output");
+	var letter = document.getElementById("letter");
+    var frameString = "", handString = "", fingerString = ""; letterString = "";
+    var hand, finger;
+    var options = { enableGestures: true };
+
+	function init() {
+		var css = document.head.appendChild( document.createElement( 'style' ) );
+		css.innerHTML =
+		`
+			@import url(https://fonts.googleapis.com/css?family=Poiret+One);
+			@import url(https://fonts.googleapis.com/css?family=Open+Sans:300);
+			body { background: #efefef;
+				    font-family: 'Open Sans', sans-serif;
+				    font-size: 16px;
+				    line-height: 24px;
+				    text-align: center; }
+			h2 { font-family: 'Poiret One', cursive;
+   				 font-size: 60px;
+   				 line-height: 25px;
+   				 padding: 25px;}
+
+			#aa {text-decoration: none; }
+			#menu { margin: 0 20px; position: absolute; padding: 40px; }
+			#text { line-height: 20px; font-size: 20px; padding: 20px; }
+			#desc {text-align: center; }
+			#letter {font-size: 35px; line-height: 20px; top: 100px; position: absolute; 
+				margin-left: auto; margin-right: auto; left: 0; right: 0;}
+			#output {text-align: left; font-size: 5px; line-height: 5px; position: absolute;}
+
+		`;
+
+		var menu = document.body.appendChild( document.createElement( 'div' ) );
+		menu.id = 'menu';
+		menu.innerHTML =
+		`
+
+			<h2>
+				${ document.title } 
+			</h2>
+			<p> Lets Learn ASL! </p>
+
+		`;
+		var text = document.body.appendChild( document.createElement( 'div' ) );
+		text.id = 'text';
+		// text.innerHTML =
+		// `
+		// 	<button type="button" class="btn btn-default">Get Started</button>
+
+		// `;
+
+		var desc = document.body.appendChild( document.createElement( 'div' ) );
+		desc.id = 'desc';
+		desc.innerHTML =
+		`
+
+			<p> Directions: Use one hand to finger spell letters from the alphabet. </p>
+
+			<p id="desc"></p>
+
+		`;
+
+		//Ignore this part - just puts stats on the right hand corner of the page
+		stats = new Stats();
+		stats.domElement.style.cssText = 'position: absolute; right: 0; top: 0; z-index: 100; ';
+		//document.body.appendChild( stats.domElement );
+
+		renderer = new THREE.WebGLRenderer( { alpha: 1, antialias: true, clearColor: 0xffffff }  );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		document.body.appendChild( renderer.domElement );
+
+		camera = new THREE.PerspectiveCamera( 35, window.innerWidth / window.innerHeight, 1, 4000 );
+		camera.position.set( 0, 250, -2500 );
+
+		controls = new THREE.OrbitControls( camera, renderer.domElement );
+		controls.maxDistance = 1000;
+
+		scene = new THREE.Scene();
+
+		// Helpers - makes the ThreeJS bottom plane
+		var gridHelper = new THREE.GridHelper( 200, 20 );
+		scene.add( gridHelper );
+
+		var axisHelper = new THREE.AxisHelper( 200 );
+		scene.add( axisHelper );
+
+		var geometry = new THREE.BoxGeometry( 1000, 10, 1000 );
+		var material = new THREE.MeshDepthMaterial();
+		var mesh = new THREE.Mesh( geometry, material );
+		mesh.position.set( 0, -10, 0 );
+		scene.add( mesh );
+
+		window.addEventListener( 'resize', onWindowResize, false );
+
+	}
+
+	function concatData(id, data) {
+      return id + ": " + data + "<br>";
+    }
+
+    function getFingerName(fingerType) {
+      switch(fingerType) {
+        case 0:
+          return 'Thumb';
+        break;
+    
+        case 1:
+          return 'Index';
+        break;
+    
+        case 2:
+          return 'Middle';
+        break;
+    
+        case 3:
+          return 'Ring';
+        break;
+    
+        case 4:
+          return 'Pinky';
+        break;
+      }
+    }
+    
+    function concatJointPosition(id, position) {
+      return id + ": " + position[0] + ", " + position[1] + ", " + position[2] + "<br>";
+    }
+    
+
+	function onWindowResize() {
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+	}
+
+	function addMesh( meshes ) {
+
+		var geometry = new THREE.BoxGeometry( 1, 1, 1 );
+		var material = new THREE.MeshNormalMaterial();
+		var mesh = new THREE.Mesh( geometry, material );
+		meshes.push( mesh );
+
+		return mesh;
+
+	}
+
+	function updateMesh( bone, mesh ) {
+
+			mesh.position.fromArray( bone.center() );
+			mesh.setRotationFromMatrix( ( new THREE.Matrix4 ).fromArray( bone.matrix() ) );
+			mesh.quaternion.multiply( baseBoneRotation );
+			mesh.scale.set( bone.width, bone.width, bone.length );
+
+			scene.add( mesh );
+
+	}
+
+	function readHand( hand, confidence, pinchstr, grabstr) {
+		var letterDet = 0;
+
+		if (confidence > 0.3) {
+			//all four fingers are up means B
+			if (hand.fingers[1].dipPosition[1] > 150 
+				&& hand.fingers[2].dipPosition[1] > 150 
+				&& hand.fingers[3].dipPosition[1] > 150 
+				&& hand.fingers[4].dipPosition[1] > 120 ) {
+				return letterDet = "B";
+			}
+			//index finger down, three fingers up means F
+			else if (hand.fingers[1].dipPosition[1] < 150 
+				&& hand.fingers[2].dipPosition[1] > 150 
+				&& hand.fingers[3].dipPosition[1] > 150 
+				&& hand.fingers[4].dipPosition[1] > 120) {
+				return letterDet = "F";
+			}
+			//w shape hand means W
+			else if (hand.fingers[1].dipPosition[1] > 150 
+				&& hand.fingers[2].dipPosition[1] > 150 
+				&& hand.fingers[3].dipPosition[1] > 150 
+				&& hand.fingers[4].dipPosition[1] < 120) {
+				return letterDet = "W";
+			}
+			//index finger pointing up means D
+			else if (hand.fingers[1].dipPosition[1] > 150
+				&& hand.fingers[2].dipPosition[1] < 120 
+				&& hand.fingers[3].dipPosition[1] < 120 
+				&& hand.fingers[4].dipPosition[1] < 120){
+				return letterDet = "D";
+			}
+
+			if (hand.fingers[1].dipPosition[1] < 120 
+				&& hand.fingers[2].dipPosition[1] < 120 
+				&& hand.fingers[3].dipPosition[1] < 120 
+				&& hand.fingers[4].dipPosition[1] > 150 ) {
+					return letterDet = "I";
+			}
+
+			//pinky and ring finger down for R, U, V, K
+			else if (hand.fingers[4].dipPosition[1] < 120
+				&& hand.fingers[3].dipPosition[1] < 120
+				&& hand.fingers[2].dipPosition[1] > 150
+				&& hand.fingers[1].dipPosition[1] > 150){
+
+				if (hand.fingers[1].dipPosition[1] - hand.fingers[2].dipPosition[1] > 3){
+					//If the thumb is up, its K instead of V
+					if (hand.fingers[0].dipPosition[1] > 100) {
+						return letterDet = "K";
+					}
+					return letterDet = "V";
+				}
+				else if (hand.fingers[1].dipPosition[1] - hand.fingers[2].dipPosition[1] < 3
+					&& hand.fingers[1].dipPosition[1] - hand.fingers[2].dipPosition[1] > 0){
+					return letterDet = "U";
+				}
+				else if (hand.fingers[1].dipPosition[1] - hand.fingers[2].dipPosition[1] < 0){
+					return letterDet = "R";
+				}
+			}
+
+			//pistol shape w/ just index means G
+			else if (hand.fingers[1].dipPosition[0] < -30
+				&& hand.fingers[2].dipPosition[0] > -30){
+				return letterDet = "G";
+			}
+			//gun shape w/ index and middle finger means H
+			else if (hand.fingers[1].dipPosition[0] < -30
+				&& hand.fingers[2].dipPosition[0] < -30){
+				return letterDet = "H";
+			}
+			//pinchstr depends for C, O
+			else if (pinchstr > .25 && pinchstr < .90) {
+				return letterDet = "C";
+			} else if (pinchstr > .90 && pinchstr < .99){
+				if (hand.fingers[0].dipPosition[0] < -30){
+					return letterDet = "A";
+				}
+				else return letterDet = "O";
+			} else if (pinchstr = 1){
+			//grabstr depends for E, S, T, M, N
+			//UNFINISHED!!!
+				if (grabstr >= 0.9) {
+
+					if (hand.fingers[1].dipPosition[1] > hand.fingers[0].dipPosition[1]
+						&& hand.fingers[2].dipPosition[1] > hand.fingers[0].dipPosition[1]
+						&& hand.fingers[3].dipPosition[1] > hand.fingers[0].dipPosition[1]
+						&& hand.fingers[4].dipPosition[1] > hand.fingers[0].dipPosition[1]) {
+						return letterDet = "E";
+					}
+					else return letterDet = "A";
+				}
+				else {
+					//write confident to test
+					return letterDet = " ";
+				}
+			}
+		} 
+		else {
+			//write not confident to test
+			return letterDet = " ";
+		}
+
+	}
+
+	// function readHandIndexOnly( hand, confidence, dip){
+	// 	var letterDet = 0;
+
+	// 	if (confidence > 0.2) {
+	// 		if (dip[1] > 150){
+	// 			return letterDet = "D";
+	// 		}
+	// 		else if (dip[0] < -30){
+	// 			return letterDet = "G";
+	// 		}
+	// 	}
+	// 	else {
+	// 		return letterDet = "not confident!";
+	// 	}
+	// }
+
+	function leapAnimate( frame ) {
+
+      frameString = concatData("frame_id", frame.id);
+      frameString += concatData("num_hands", frame.hands.length);
+      frameString += concatData("num_fingers", frame.fingers.length);
+      frameString += "<br>";
+    
+      //Showcase some new V2 features
+      for (var i = 0, len = frame.hands.length; i < len; i++) {
+        hand = frame.hands[i];
+        handString = concatData("hand_type", hand.type);
+        handString += concatData("confidence", hand.confidence);
+        handString += concatData("pinch_strength", hand.pinchStrength);
+        handString += concatData("grab_strength", hand.grabStrength);
+    
+        handString += '<br>';
+    
+        // Helpers for thumb, pinky, etc.
+        fingerString = concatJointPosition("finger_thumb_dip", hand.thumb.dipPosition);
+        for (var j = 0, len2 = hand.fingers.length; j < len2; j++) {
+          finger = hand.fingers[j];
+          fingerString += concatData("finger_type", finger.type) + " (" + getFingerName(finger.type) + ") <br>";
+          fingerString += concatJointPosition("finger_dip", finger.dipPosition);
+          fingerString += concatJointPosition("finger_pip", finger.pipPosition);
+          fingerString += concatJointPosition("finger_mcp", finger.mcpPosition);
+          fingerString += "<br>";
+
+          //Index finger only letters
+          // if (j == 1){
+          // 	letterString = readHandIndexOnly(hand, hand.confidence, finger.dipPosition);
+          // 	letterString += "<br>";
+          // }
+         //  	letterString = readHand(hand, finger, hand.confidence, hand.pinchStrength, hand.grabStrength);
+       		// letterString += "<br>";
+        }
+    
+        frameString += handString;
+        frameString += fingerString;
+
+        letterString = readHand(hand, hand.confidence, hand.pinchStrength, hand.grabStrength);
+        letterString += "<br>";
+      }
+    
+      output.innerHTML = frameString;
+      letter.innerHTML = letterString;
+    
+
+		var countBones = 0;
+		var countArms = 0;
+
+		armMeshes.forEach( function( item ) { scene.remove( item ) } );
+		boneMeshes.forEach( function( item ) { scene.remove( item ) } );
+
+		for ( var hand of frame.hands ) {
+
+			for ( var finger of hand.fingers ) {
+
+				for ( var bone of finger.bones ) {
+
+					if ( countBones++ === 0 ) { continue; }
+
+					var boneMesh = boneMeshes [ countBones ] || addMesh( boneMeshes );
+					updateMesh( bone, boneMesh );
+
+				}
+
+			}
+			// Commented this out - ignored, just an arm part 
+
+			// var arm = hand.arm;
+			// var armMesh = armMeshes [ countArms++ ] || addMesh( armMeshes );
+			// updateMesh( arm, armMesh );
+			// armMesh.scale.set( arm.width , arm.width , arm.length );
+
+		}
+
+		renderer.render( scene, camera );
+		controls.update();
+		stats.update();
+
+	}
+
+	var frame_id;
+      var num_hands;
+      var num_fingers;
+
+	//Runs the init function, then the Leap loop
+	init();
+	Leap.loop(options, leapAnimate).connect();
+
+</script>
+
+
+</body>
+</html>

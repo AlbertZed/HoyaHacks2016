@@ -17,10 +17,7 @@
 	<script src=http://js.leapmotion.com/leap-0.6.4.js ></script>
 	<script src=http://js.leapmotion.com/leap-plugins-0.1.11.js></script>
 
-	<div id="output">
-	</div>
-	<div id="letter">
-	</div>
+
 <script>
 	var baseBoneRotation = ( new THREE.Quaternion ).setFromEuler( new THREE.Euler( 0, 0, Math.PI / 2 ) );
 	var armMeshes = [];
@@ -28,10 +25,14 @@
 	var stats, renderer, scene, camera, controls;
 
 	var output = document.getElementById("output");
-	var letter = document.getElementById("letter");
-    var frameString = "", handString = "", fingerString = ""; letterString = "";
+    var frameString = "", handString = "", fingerString = "";
     var hand, finger;
     var options = { enableGestures: true };
+ 
+
+	//Runs the init function, then the Leap loop
+	init();
+	Leap.loop( {enableGestures: true}, leapAnimate).connect();
 
 	function init() {
 		var css = document.head.appendChild( document.createElement( 'style' ) );
@@ -52,8 +53,7 @@
 			#aa {text-decoration: none; }
 			#menu { margin: 0 20px; position: absolute; padding: 40px; }
 			#text { line-height: 45px; font-size: 20px; padding: 20px; }
-			#letter {text-align: center;}
-			#output {text-align: left; font-size: 5px; line-height: 5px; position: absolute;}
+			#letter {text-align: center; }
 
 		`;
 
@@ -66,6 +66,7 @@
 				${ document.title } 
 			</h2>
 			<p> Lets Learn ASL! </p>
+			<div id=info ></div>
 
 		`;
 		var text = document.body.appendChild( document.createElement( 'div' ) );
@@ -81,8 +82,8 @@
 		letter.innerHTML =
 		`
 
-			<p> Directions: Use one hand to finger spell letters from the alphabet. </p>
-			<p id="letter"></p>
+			<p> Letter: </p>
+			<p id="output"></p>
 
 		`;
 
@@ -96,7 +97,7 @@
 		document.body.appendChild( renderer.domElement );
 
 		camera = new THREE.PerspectiveCamera( 35, window.innerWidth / window.innerHeight, 1, 5000 );
-		camera.position.set( 0, 250, -2500 );
+		camera.position.set( 0, 250, 2500 );
 
 		controls = new THREE.OrbitControls( camera, renderer.domElement );
 		controls.maxDistance = 1000;
@@ -124,7 +125,16 @@
       return id + ": " + data + "<br>";
     }
 
-    function getFingerName(fingerType) {
+	function onWindowResize() {
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+	}
+
+	function getFingerName(fingerType) {
       switch(fingerType) {
         case 0:
           return 'Thumb';
@@ -147,20 +157,11 @@
         break;
       }
     }
-    
+
+
     function concatJointPosition(id, position) {
       return id + ": " + position[0] + ", " + position[1] + ", " + position[2] + "<br>";
     }
-    
-
-	function onWindowResize() {
-
-		camera.aspect = window.innerWidth / window.innerHeight;
-		camera.updateProjectionMatrix();
-
-		renderer.setSize( window.innerWidth, window.innerHeight );
-
-	}
 
 	function addMesh( meshes ) {
 
@@ -184,69 +185,7 @@
 
 	}
 
-	function readHand( hand, confidence, pinchstr, grabstr) {
-		var letterDet = 0;
-
-		if (confidence > 0.5) {
-			//pinchstr depends for C, O
-			if (pinchstr > .50 && pinchstr < .85) {
-				return letterDet = "C";
-			} else if (pinchstr > .9 && pinchstr < 1){
-				return letterDet = "O";
-			} else if (pinchstr = 1){
-			//grabstr depends for A, E, S, T, M, N
-				if (grabstr >= 0.9) {
-					return letterDet = "A";
-				}
-				else {
-					return letterDet = "confident!";
-				}
-			}
-		} 
-		else {
-			return letterDet = "not confident!";
-		}
-
-	}
-
 	function leapAnimate( frame ) {
-
-      frameString = concatData("frame_id", frame.id);
-      frameString += concatData("num_hands", frame.hands.length);
-      frameString += concatData("num_fingers", frame.fingers.length);
-      frameString += "<br>";
-    
-      //Showcase some new V2 features
-      for (var i = 0, len = frame.hands.length; i < len; i++) {
-        hand = frame.hands[i];
-        handString = concatData("hand_type", hand.type);
-        handString += concatData("confidence", hand.confidence);
-        handString += concatData("pinch_strength", hand.pinchStrength);
-        handString += concatData("grab_strength", hand.grabStrength);
-    
-        handString += '<br>';
-    
-        // Helpers for thumb, pinky, etc.
-        fingerString = concatJointPosition("finger_thumb_dip", hand.thumb.dipPosition);
-        for (var j = 0, len2 = hand.fingers.length; j < len2; j++) {
-          finger = hand.fingers[j];
-          fingerString += concatData("finger_type", finger.type) + " (" + getFingerName(finger.type) + ") <br>";
-          fingerString += concatJointPosition("finger_dip", finger.dipPosition);
-          fingerString += concatJointPosition("finger_pip", finger.pipPosition);
-          fingerString += concatJointPosition("finger_mcp", finger.mcpPosition);
-          fingerString += "<br>";
-        }
-    
-        frameString += handString;
-        frameString += fingerString;
-
-        letterString = readHand(hand, hand.confidence, hand.pinchStrength, hand.grabStrength);
-        letterString += "<br>";
-      }
-    
-      output.innerHTML = frameString;
-      letter.innerHTML = letterString;
-    
 
 		var countBones = 0;
 		var countArms = 0;
@@ -276,21 +215,45 @@
 			// armMesh.scale.set( arm.width , arm.width , arm.length );
 
 		}
+//-------------------------------------------------------------
+	frameString = concatData("frame_id", frame.id);
+      frameString += concatData("num_hands", frame.hands.length);
+      frameString += concatData("num_fingers", frame.fingers.length);
+      frameString += "<br>";
+    
+      // Showcase some new V2 features
+      for (var i = 0, len = frame.hands.length; i < len; i++) {
+        hand = frame.hands[i];
+        handString = concatData("hand_type", hand.type);
+        handString += concatData("confidence", hand.confidence);
+        handString += concatData("pinch_strength", hand.pinchStrength);
+        handString += concatData("grab_strength", hand.grabStrength);
+    
+        handString += '<br>';
+    
+        // Helpers for thumb, pinky, etc.
+        fingerString = concatJointPosition("finger_thumb_dip", hand.thumb.dipPosition);
+        for (var j = 0, len2 = hand.fingers.length; j < len2; j++) {
+          finger = hand.fingers[j];
+          fingerString += concatData("finger_type", finger.type) + " (" + getFingerName(finger.type) + ") <br>";
+          fingerString += concatJointPosition("finger_dip", finger.dipPosition);
+          fingerString += concatJointPosition("finger_pip", finger.pipPosition);
+          fingerString += concatJointPosition("finger_mcp", finger.mcpPosition);
+          fingerString += "<br>";
+        }
+    
+        frameString += handString;
+        frameString += fingerString;
+      }
+    
+      output.innerHTML = frameString;
 
+//-----------------------------------------------------------------
 		renderer.render( scene, camera );
 		controls.update();
 		stats.update();
 
 	}
-
-	var frame_id;
-      var num_hands;
-      var num_fingers;
-      var len = 1, len2 = 1;
-
-	//Runs the init function, then the Leap loop
-	init();
-	Leap.loop(options, leapAnimate).connect();
 
 </script>
 
